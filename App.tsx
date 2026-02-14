@@ -13,8 +13,10 @@ const App: React.FC = () => {
   const [isActive, setIsActive] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  // 음원 미리 로드
+  // 초기화: 오디오 및 음원 로드
   useEffect(() => {
+    // 사용자의 첫 터치 이벤트를 감지하여 오디오 컨텍스트를 활성화합니다.
+    audioService.init();
     audioService.preloadAll();
   }, []);
 
@@ -83,7 +85,7 @@ const App: React.FC = () => {
   }, [isActive]);
 
   const handleToggle = () => {
-    // iOS 오디오 차단 해제를 위해 클릭 시점에 unlock 호출
+    // 버튼 클릭 시에도 명시적으로 언락 시도 (전역 리스너가 실패했을 경우 대비)
     audioService.unlock();
 
     if (!isActive && (secondsElapsedTotal >= TOTAL_STATION_SECONDS || secondsElapsedTotal === 0)) {
@@ -100,7 +102,7 @@ const App: React.FC = () => {
   };
 
   const handleNext = () => {
-    audioService.unlock(); // 버튼 클릭 시 오디오 활성화 상태 유지
+    audioService.unlock();
     const nextPhaseStart = phases.slice(0, phaseIndex + 1).reduce((sum, p) => sum + p.duration, 0);
     if (nextPhaseStart < TOTAL_STATION_SECONDS) {
       setSecondsElapsedTotal(nextPhaseStart);
