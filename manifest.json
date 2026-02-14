@@ -1,0 +1,17 @@
+
+{
+  "name": "2026 동국의대 CPX TIMER",
+  "short_name": "CPX TIMER",
+  "description": "동국의대생을 위한 CPX 실전 연습용 타이머",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F0F4F8",
+  "theme_color": "#2563EB",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2830/2830312.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

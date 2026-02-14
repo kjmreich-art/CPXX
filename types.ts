@@ -1,5 +1,4 @@
 
-
 export enum Phase {
   PREPARATION = 'SITUATION_READING',
   CONSULTATION = 'CONSULTATION',
@@ -28,29 +27,33 @@ export const ALARM_TIMESTAMPS = [
   PREPARATION_SECONDS + DEFAULT_CONSULTATION_SECONDS
 ];
 
-export const getPhases = (consultationDuration: number): PhaseInfo[] => [
-  {
-    id: Phase.PREPARATION,
-    label: '상황 숙지',
-    subLabel: '(READING)',
-    duration: PREPARATION_SECONDS,
-    color: 'bg-blue-100 text-blue-600',
-    activeColor: 'bg-blue-600'
-  },
-  {
-    id: Phase.CONSULTATION,
-    label: '진료',
-    subLabel: `(${Math.floor(consultationDuration / 60)}분 ${consultationDuration % 60}초)`,
-    duration: consultationDuration,
-    color: 'bg-emerald-100 text-emerald-600',
-    activeColor: 'bg-emerald-500'
-  },
-  {
-    id: Phase.FEEDBACK,
-    label: '피드백 및 대기',
-    subLabel: '',
-    duration: TOTAL_STATION_SECONDS - PREPARATION_SECONDS - consultationDuration,
-    color: 'bg-slate-100 text-slate-500',
-    activeColor: 'bg-slate-400'
-  }
-];
+export const getPhases = (consultationDuration: number): PhaseInfo[] => {
+  const feedbackDuration = TOTAL_STATION_SECONDS - PREPARATION_SECONDS - consultationDuration;
+  
+  return [
+    {
+      id: Phase.PREPARATION,
+      label: '상황 숙지',
+      subLabel: '(1분)',
+      duration: PREPARATION_SECONDS,
+      color: 'bg-blue-100 text-blue-600',
+      activeColor: 'bg-blue-600'
+    },
+    {
+      id: Phase.CONSULTATION,
+      label: '진료',
+      subLabel: `(${Math.floor(consultationDuration / 60)}분 ${consultationDuration % 60}초)`,
+      duration: consultationDuration,
+      color: 'bg-emerald-100 text-emerald-600',
+      activeColor: 'bg-emerald-500'
+    },
+    {
+      id: Phase.FEEDBACK,
+      label: '피드백 및 대기',
+      subLabel: `(${Math.floor(feedbackDuration / 60)}분 ${feedbackDuration % 60}초)`,
+      duration: feedbackDuration,
+      color: 'bg-slate-100 text-slate-500',
+      activeColor: 'bg-slate-400'
+    }
+  ];
+};

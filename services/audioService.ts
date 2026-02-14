@@ -1,43 +1,53 @@
 
 /**
- * [알람 음원 설정 가이드]
- * 1. 깃허브: https://raw.githubusercontent.com/사용자/레포/main/파일.mp3 (권장)
- * 2. 원드라이브: 직링크 변환 도구를 통해 얻은 'Direct Download' 주소만 가능
- * 3. 구글 드라이브: 직링크 변환 도구를 통해 얻은 주소만 가능
+ * [알람 음원 설정]
+ * 깃허브의 raw.githubusercontent.com 도메인을 사용하여 CORS 에러를 방지하고
+ * 브라우저가 직접 MP3 데이터를 가져올 수 있도록 설정합니다.
  */
-
-// 현재 모든 알람에 사용 중인 주소입니다.
-const ALARM_URL = 'https://raw.githubusercontent.com/kjmreich-art/CPXX/main/ipsil.mp3';
-
 const ALARM_URLS = {
-  READING_START: ALARM_URL,
-  ROOM_ENTRY: ALARM_URL,
-  TWO_MIN_WARNING: ALARM_URL,
-  CONSULT_END: ALARM_URL
+  READING_START: 'https://raw.githubusercontent.com/kjmreich-art/mus/main/sanghwang.mp3', // 1. 상황숙지 (0s)
+  ROOM_ENTRY: 'https://raw.githubusercontent.com/kjmreich-art/mus/main/ipsil.mp3',         // 2. 입실 (1m)
+  TWO_MIN_WARNING: 'https://raw.githubusercontent.com/kjmreich-art/mus/main/2min.mp3',    // 3. 2분전
+  CONSULT_END: 'https://raw.githubusercontent.com/kjmreich-art/mus/main/end.mp3'          // 4. 종료
 };
 
 class AudioService {
   private context: AudioContext | null = null;
   private bufferCache: Map<string, AudioBuffer> = new Map();
 
-  private async initContext() {
+  private async getContext() {
     if (!this.context) {
       this.context = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    if (this.context.state === 'suspended') {
-      await this.context.resume();
     }
     return this.context;
   }
 
+  /**
+   * iOS의 오디오 차단을 해제합니다. 
+   * 반드시 사용자의 '클릭' 이벤트 핸들러 내부에서 호출되어야 합니다.
+   */
+  public async unlock() {
+    const ctx = await this.getContext();
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+    
+    // 무음 버퍼를 짧게 재생하여 시스템에 오디오 사용을 알립니다 (iOS용 트릭)
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+  }
+
   public async preloadAll() {
-    console.log('오디오 사전 로드 시작...');
+    console.log('알람 음원 사전 로드 중...');
+    const urls = Object.values(ALARM_URLS);
     try {
-      const urls = Array.from(new Set(Object.values(ALARM_URLS)));
       await Promise.all(urls.map(url => this.loadSound(url)));
-      console.log('모든 오디오 로드 완료');
+      console.log('모든 음원 로드 완료');
     } catch (e) {
-      console.warn('일부 오디오 로드 실패 (네트워크 또는 CORS 문제)');
+      console.warn('일부 음원 로드 실패');
     }
   }
 
@@ -47,46 +57,35 @@ class AudioService {
     }
 
     try {
-      const response = await fetch(url, {
-        method: 'GET',
-        // 원드라이브 등 외부 서버의 경우 CORS 정책에 따라 차단될 수 있음
-        mode: 'cors', 
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP 에러: ${response.status}`);
-      }
-      
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const arrayBuffer = await response.arrayBuffer();
-      const ctx = await this.initContext();
-      
-      const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
-        ctx.decodeAudioData(arrayBuffer, resolve, reject);
-      });
-
+      const ctx = await this.getContext();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
       this.bufferCache.set(url, audioBuffer);
       return audioBuffer;
-    } catch (error: any) {
-      console.error('오디오 로드 실패:', url, error.message);
+    } catch (error) {
+      console.warn('MP3 로드 실패, 기본 비프음으로 대체합니다:', url);
       return null;
     }
   }
 
   private async playBuffer(buffer: AudioBuffer) {
-    try {
-      const ctx = await this.initContext();
-      const source = ctx.createBufferSource();
-      const gainNode = ctx.createGain();
-      
-      source.buffer = buffer;
-      gainNode.gain.setValueAtTime(0.8, ctx.currentTime);
-      
-      source.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      source.start(0);
-    } catch (e) {
-      console.error('재생 중 오류 발생:', e);
+    const ctx = await this.getContext();
+    // 재생 직전 상태 확인 및 재개 (iOS 호환성 강화)
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
     }
+    
+    const source = ctx.createBufferSource();
+    const gainNode = ctx.createGain();
+    
+    source.buffer = buffer;
+    gainNode.gain.setValueAtTime(0.8, ctx.currentTime);
+    
+    source.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    source.start(0);
   }
 
   public async playReadingStart() {
@@ -113,20 +112,19 @@ class AudioService {
     else this.playFallbackBeep(880, 1.2);
   }
 
-  private playFallbackBeep(freq: number, duration: number) {
-    // 오디오 파일 로드에 실패했을 때를 대비한 기본 비프음
-    if (!this.context) return;
-    try {
-      const osc = this.context.createOscillator();
-      const gain = this.context.createGain();
-      osc.frequency.setValueAtTime(freq, this.context.currentTime);
-      gain.gain.setValueAtTime(0.1, this.context.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.00001, this.context.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(this.context.destination);
-      osc.start();
-      osc.stop(this.context.currentTime + duration);
-    } catch (e) {}
+  private async playFallbackBeep(freq: number, duration: number) {
+    const ctx = await this.getContext();
+    if (ctx.state === 'suspended') await ctx.resume();
+    
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
   }
 }
 

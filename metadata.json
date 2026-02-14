@@ -1,5 +1,5 @@
 {
-  "name": "CPX Master Timer",
+  "name": "CPX TIMER",
   "description": "A specialized timer for medical students to practice Clinical Performance Examination (CPX). Features automated alarms for situation reading, room entry, 2-minute warnings, and session completion based on official exam protocols.",
   "requestFramePermissions": [
     "microphone"

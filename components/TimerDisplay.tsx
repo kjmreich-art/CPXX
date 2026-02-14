@@ -15,27 +15,30 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({ phase, elapsedInPhase }) =>
   const progress = (timeLeft / phase.duration) * 100;
 
   return (
-    <div className="w-full max-w-md bg-white rounded-[40px] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-50 p-10 flex flex-col items-center transition-all duration-500">
-      <div className="text-blue-400 font-bold text-sm tracking-wider mb-6 flex items-center gap-2">
-        {phase.label} <span className="opacity-50 text-[10px] font-medium">{phase.subLabel}</span>
+    <div className="w-full max-w-[340px] bg-white rounded-[40px] shadow-[0_20px_50px_rgba(0,0,0,0.06)] border border-white/60 p-8 flex flex-col items-center relative overflow-hidden group transition-all duration-500">
+      {/* Decorative background element */}
+      <div className={`absolute top-0 left-0 w-full h-1.5 ${phase.activeColor} opacity-20`} />
+      
+      <div className={`${phase.color} px-4 py-1.5 rounded-xl font-black text-[10px] tracking-widest uppercase mb-6 transition-colors duration-500`}>
+        {phase.label}
       </div>
       
-      <div className="mono text-[100px] font-black text-[#2D3748] leading-none mb-10 flex tabular-nums">
-        <span>{minutes.toString().padStart(2, '0')}</span>
-        <span className="mx-1 text-slate-200">:</span>
-        <span>{seconds.toString().padStart(2, '0')}</span>
+      <div className="mono text-[84px] sm:text-[110px] font-black text-slate-800 leading-none mb-8 flex tabular-nums tracking-tighter">
+        <span className="drop-shadow-sm">{minutes.toString().padStart(2, '0')}</span>
+        <span className="mx-1 text-slate-100 animate-pulse">:</span>
+        <span className="drop-shadow-sm">{seconds.toString().padStart(2, '0')}</span>
       </div>
 
-      <div className="w-full mb-2">
-        <div className="h-3 w-full bg-slate-50 rounded-full overflow-hidden relative">
+      <div className="w-full">
+        <div className="h-3 w-full bg-slate-50 rounded-full overflow-hidden relative shadow-inner">
           <div 
-            className="h-full bg-blue-600 rounded-full transition-all duration-1000 ease-linear shadow-[0_0_15px_rgba(37,99,235,0.4)]"
+            className={`h-full ${phase.activeColor} rounded-full transition-all duration-1000 ease-linear shadow-[0_0_15px_rgba(37,99,235,0.2)]`}
             style={{ width: `${progress}%` }}
           />
         </div>
-        <div className="flex justify-between mt-3 text-[11px] font-bold text-slate-400">
-          <span>{Math.floor(phase.duration / 60).toString().padStart(2, '0')}:{(phase.duration % 60).toString().padStart(2, '0')}</span>
-          <span>00:00</span>
+        <div className="flex justify-between mt-3 text-[9px] font-black text-slate-300 tracking-tighter px-0.5 uppercase">
+          <span>LIMIT: {Math.floor(phase.duration / 60)}M {phase.duration % 60}S</span>
+          <span>REMAINING</span>
         </div>
       </div>
     </div>

@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Phase, getPhases, DEFAULT_CONSULTATION_SECONDS, TOTAL_STATION_SECONDS } from './types';
 import { audioService } from './services/audioService';
 import TimerDisplay from './components/TimerDisplay';
-import { Play, Pause, RotateCcw, SkipForward, Clock, Settings2, Repeat, Check } from 'lucide-react';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
+import { Play, Pause, RotateCcw, SkipForward, Clock, Settings2, Repeat, Check, ShieldCheck } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isRepeat, setIsRepeat] = useState(false);
@@ -12,7 +13,7 @@ const App: React.FC = () => {
   const [isActive, setIsActive] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  // 앱 시작 시 오디오 미리 로드
+  // 음원 미리 로드
   useEffect(() => {
     audioService.preloadAll();
   }, []);
@@ -43,34 +44,24 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isActive) return;
 
-    // 1. 상황 숙지 시작 (0초)
+    const entryTime = phases[0].duration;
+    const warningTime = phases[0].duration + phases[1].duration - 120;
+    const consultEndTime = phases[0].duration + phases[1].duration;
+
     if (secondsElapsedTotal === 0 && lastAlarmRef.current !== 0) {
       lastAlarmRef.current = 0;
       audioService.playReadingStart();
-    }
-
-    // 2. 시험실 입실 (상황 숙지 종료 시점 = 1분)
-    const entryTime = phases[0].duration;
-    if (secondsElapsedTotal === entryTime && lastAlarmRef.current !== entryTime) {
+    } else if (secondsElapsedTotal === entryTime && lastAlarmRef.current !== entryTime) {
       lastAlarmRef.current = entryTime;
       audioService.playRoomEntry();
-    }
-
-    // 3. 진료 종료 2분 전 (입실시간 + 진료시간 - 120초)
-    const warningTime = phases[0].duration + phases[1].duration - 120;
-    if (secondsElapsedTotal === warningTime && lastAlarmRef.current !== warningTime) {
+    } else if (secondsElapsedTotal === warningTime && lastAlarmRef.current !== warningTime) {
       lastAlarmRef.current = warningTime;
       audioService.playTwoMinWarning();
-    }
-
-    // 4. 진료 종료 (입실시간 + 진료시간)
-    const consultEndTime = phases[0].duration + phases[1].duration;
-    if (secondsElapsedTotal === consultEndTime && lastAlarmRef.current !== consultEndTime) {
+    } else if (secondsElapsedTotal === consultEndTime && lastAlarmRef.current !== consultEndTime) {
       lastAlarmRef.current = consultEndTime;
       audioService.playConsultEnd();
     }
 
-    // 사이클 전체 종료 및 반복 로직
     if (secondsElapsedTotal >= TOTAL_STATION_SECONDS) {
       if (isRepeat) {
         setSecondsElapsedTotal(0);
@@ -92,7 +83,10 @@ const App: React.FC = () => {
   }, [isActive]);
 
   const handleToggle = () => {
-    if (!isActive && secondsElapsedTotal >= TOTAL_STATION_SECONDS) {
+    // iOS 오디오 차단 해제를 위해 클릭 시점에 unlock 호출
+    audioService.unlock();
+
+    if (!isActive && (secondsElapsedTotal >= TOTAL_STATION_SECONDS || secondsElapsedTotal === 0)) {
       setSecondsElapsedTotal(0);
       lastAlarmRef.current = null;
     }
@@ -106,143 +100,156 @@ const App: React.FC = () => {
   };
 
   const handleNext = () => {
+    audioService.unlock(); // 버튼 클릭 시 오디오 활성화 상태 유지
     const nextPhaseStart = phases.slice(0, phaseIndex + 1).reduce((sum, p) => sum + p.duration, 0);
     if (nextPhaseStart < TOTAL_STATION_SECONDS) {
       setSecondsElapsedTotal(nextPhaseStart);
+    } else {
+      setSecondsElapsedTotal(0);
+      lastAlarmRef.current = null;
+      setIsActive(true);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFD] flex flex-col items-center py-12 px-6 overflow-hidden">
-      <header className="flex flex-col items-center mb-10 text-center">
-        <div className="flex items-center gap-3 mb-2">
-          <Clock className="text-blue-600 w-8 h-8" />
-          <h1 className="text-3xl font-black text-[#1A202C] tracking-tight">CPX Master Timer</h1>
-        </div>
-        <p className="text-slate-400 font-bold text-sm">졸업학년 의대생 실전 연습 도구</p>
-      </header>
+    <div className="h-screen max-h-screen bg-gradient-to-b from-[#F0F4F8] to-[#FFFFFF] flex flex-col items-center p-4 overflow-hidden touch-none relative">
+      
+      {/* PWA Install Inducer */}
+      <PWAInstallPrompt />
 
-      <div className="flex gap-3 mb-12">
+      {/* App Title Header */}
+      <div className="mt-4 mb-2 animate-in fade-in slide-in-from-top-4 duration-700">
+        <h1 className="text-lg font-black text-slate-800 tracking-tighter flex items-center gap-2">
+          <span className="text-blue-600">2026 동국의대</span>
+          <span className="opacity-40">|</span>
+          <span>CPX TIMER</span>
+        </h1>
+      </div>
+
+      {/* Main Action Buttons (Positioned lower) */}
+      <div className="grid grid-cols-2 gap-3 w-full max-w-md mb-4 animate-in fade-in zoom-in-95 duration-700 delay-100">
         <button 
-          onClick={() => setIsRepeat(!isRepeat)}
-          className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all border ${
-            isRepeat ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-100 text-slate-400'
+          onClick={() => {
+            audioService.unlock();
+            setIsRepeat(!isRepeat);
+          }}
+          className={`flex flex-col items-center justify-center gap-1 p-4 rounded-[24px] transition-all duration-300 border-2 ${
+            isRepeat 
+              ? 'bg-blue-600 border-blue-600 text-white shadow-lg' 
+              : 'bg-white border-slate-100 text-slate-500 hover:border-blue-200'
           }`}
         >
-          <Repeat className="w-4 h-4" />
-          진료 반복: {isRepeat ? 'ON' : 'OFF'}
+          <Repeat className={`w-5 h-5 ${isRepeat ? 'animate-spin-slow' : ''}`} />
+          <span className="text-[11px] font-black uppercase tracking-tight">반복: {isRepeat ? 'ON' : 'OFF'}</span>
         </button>
+
         <button 
-          onClick={() => setShowSettings(true)}
-          className="flex items-center gap-2 px-6 py-3 rounded-full bg-white border border-slate-100 text-slate-500 text-xs font-bold hover:bg-slate-50 transition-all"
+          onClick={() => {
+            audioService.unlock();
+            setShowSettings(true);
+          }}
+          className="flex flex-col items-center justify-center gap-1 p-4 rounded-[24px] bg-white border-2 border-slate-100 text-slate-600 hover:border-blue-200 transition-all duration-300 shadow-sm"
         >
-          <Settings2 className="w-4 h-4" />
-          진료 시간 설정
+          <Settings2 className="w-5 h-5" />
+          <span className="text-[11px] font-black uppercase tracking-tight">시간 설정</span>
         </button>
       </div>
 
-      <TimerDisplay phase={currentPhase} elapsedInPhase={elapsedInPhase} />
-
-      <div className="w-full max-w-md mt-10">
-        <div className="flex justify-between text-[9px] font-black text-slate-300 uppercase tracking-widest mb-2 px-1">
-          <span>START</span>
-          <span>입실 (01:00)</span>
-          <span>종료 ({Math.floor((60 + consultationDuration)/60)}:{(60 + consultationDuration)%60 === 0 ? '00' : (60 + consultationDuration)%60})</span>
-          <span>RESET</span>
-        </div>
-        <div className="h-2.5 w-full bg-slate-100 rounded-full flex overflow-hidden">
-          {phases.map((p, i) => {
-            const width = (p.duration / TOTAL_STATION_SECONDS) * 100;
-            const isCompleted = phaseIndex > i;
-            const isCurrent = phaseIndex === i;
-            return (
-              <div 
-                key={p.id} 
-                className={`h-full transition-all duration-500 ${
-                  isCompleted ? p.activeColor : (isCurrent ? `${p.activeColor} opacity-40` : 'bg-transparent')
-                }`}
-                style={{ width: `${width}%` }}
-              />
-            );
-          })}
-        </div>
+      {/* Main Timer Display */}
+      <div className="w-full flex-grow flex items-center justify-center animate-in fade-in slide-in-from-bottom-6 duration-700 delay-200">
+        <TimerDisplay phase={currentPhase} elapsedInPhase={elapsedInPhase} />
       </div>
 
-      <div className="flex items-center gap-6 mt-12">
-        <button
-          onClick={handleToggle}
-          className="group relative flex items-center justify-center gap-3 px-12 py-6 bg-blue-600 text-white rounded-[32px] font-black text-xl shadow-[0_15px_35px_rgba(37,99,235,0.3)] hover:scale-105 active:scale-95 transition-all"
-        >
-          {isActive ? <Pause className="fill-white" /> : <Play className="fill-white" />}
-          <span>{isActive ? '진료 중지' : (secondsElapsedTotal > 0 ? '다시 시작' : '연습 시작')}</span>
-        </button>
-
+      {/* Control Bar */}
+      <div className="flex items-center gap-4 mt-6 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
         <button
           onClick={handleReset}
-          className="flex items-center justify-center w-20 h-20 rounded-full bg-white border border-slate-100 text-slate-300 hover:text-red-400 hover:border-red-100 transition-all shadow-sm active:scale-90"
+          className="group flex items-center justify-center w-14 h-14 rounded-2xl bg-white border-2 border-slate-100 text-slate-300 hover:text-red-500 transition-all shadow-sm active:scale-90"
         >
-          <RotateCcw className="w-8 h-8" />
+          <RotateCcw className="w-6 h-6 group-hover:rotate-[-45deg] transition-transform" />
+        </button>
+
+        <button
+          onClick={handleToggle}
+          className={`group flex items-center justify-center gap-3 px-10 py-5 rounded-[32px] font-black text-xl transition-all duration-300 active:scale-95 ${
+            isActive 
+              ? 'bg-slate-800 text-white shadow-xl shadow-slate-200' 
+              : 'bg-blue-600 text-white shadow-xl shadow-blue-200'
+          }`}
+        >
+          {isActive ? <Pause className="fill-current w-6 h-6" /> : <Play className="fill-current w-6 h-6" />}
+          <span>{isActive ? '중지' : (secondsElapsedTotal > 0 ? '재시작' : '시작')}</span>
         </button>
 
         <button
           onClick={handleNext}
-          className="flex items-center justify-center w-20 h-20 rounded-full bg-white border border-slate-100 text-slate-300 hover:text-blue-500 hover:border-blue-100 transition-all shadow-sm active:scale-90"
+          className="group flex items-center justify-center w-14 h-14 rounded-2xl bg-white border-2 border-slate-100 text-slate-300 hover:text-blue-600 transition-all shadow-sm active:scale-90"
         >
-          <SkipForward className="w-8 h-8" />
+          <SkipForward className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-4 mt-16">
+      {/* Phase Badges */}
+      <div className="flex flex-wrap justify-center gap-2 mt-6 mb-2 animate-in fade-in duration-700 delay-400">
         {phases.map((p, i) => (
           <div 
             key={p.id}
-            className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-bold transition-all ${
-              phaseIndex === i ? 'ring-2 ring-offset-2 ring-blue-100 scale-105' : 'opacity-60'
-            } ${p.color}`}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-black transition-all duration-500 ${
+              phaseIndex === i 
+                ? `${p.color} ring-2 ring-offset-1 ring-blue-50 scale-105 shadow-sm` 
+                : 'bg-white text-slate-300 border border-slate-100 opacity-60'
+            }`}
           >
-            <div className={`w-2 h-2 rounded-full ${p.activeColor}`} />
-            {p.label} ({p.id === Phase.CONSULTATION ? `${Math.floor(consultationDuration / 60)}분 ${consultationDuration % 60}초` : `${Math.floor(p.duration / 60)}분`})
+            <div className={`w-2 h-2 rounded-full ${phaseIndex === i ? p.activeColor : 'bg-slate-200'}`} />
+            {p.label} <span className="opacity-50 font-bold">{p.subLabel}</span>
           </div>
         ))}
       </div>
 
-      <footer className="mt-20 text-[11px] font-black text-slate-300 tracking-[0.2em] uppercase">
-        Medical Practice Solution • CPX 15m Cycle
+      {/* Footer */}
+      <footer className="mt-2 py-4 text-center opacity-40">
+        <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase">Created by JM</p>
       </footer>
 
+      {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-6">
-          <div className="bg-white rounded-[40px] w-full max-sm p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-8">
-              <Settings2 className="text-blue-600" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] w-full max-sm p-8 shadow-2xl border border-white/20">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-2 bg-blue-50 rounded-xl text-blue-600">
+                <Settings2 className="w-5 h-5" />
+              </div>
               <h2 className="text-xl font-black text-slate-800">진료 시간 설정</h2>
             </div>
             
             <div className="space-y-6">
-              <div>
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-4">진료 시간 선택</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[480, 540, 600, 630, 660, 720].map((sec) => (
-                    <button
-                      key={sec}
-                      onClick={() => setConsultationDuration(sec)}
-                      className={`py-4 rounded-2xl font-bold text-sm border transition-all ${
-                        consultationDuration === sec 
-                          ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100' 
-                          : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
-                      }`}
-                    >
-                      {Math.floor(sec / 60)}분 {sec % 60 > 0 ? `${sec % 60}초` : ''}
-                    </button>
-                  ))}
-                </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[480, 540, 600, 630, 660, 720].map((sec) => (
+                  <button
+                    key={sec}
+                    onClick={() => {
+                      audioService.unlock();
+                      setConsultationDuration(sec);
+                    }}
+                    className={`py-4 rounded-2xl font-black text-sm border-2 transition-all duration-300 ${
+                      consultationDuration === sec 
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-md' 
+                        : 'bg-slate-50 border-transparent text-slate-400'
+                    }`}
+                  >
+                    {Math.floor(sec / 60)}분 {sec % 60 > 0 ? `${sec % 60}초` : ''}
+                  </button>
+                ))}
               </div>
               
               <button
-                onClick={() => setShowSettings(false)}
-                className="w-full py-5 bg-slate-800 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 mt-4 active:scale-95 transition-all"
+                onClick={() => {
+                  audioService.unlock();
+                  setShowSettings(false);
+                }}
+                className="w-full py-5 bg-slate-800 text-white rounded-[24px] font-black text-base flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all"
               >
-                <Check className="w-4 h-4" /> 설정 완료
+                <Check className="w-5 h-5" /> 설정 완료
               </button>
             </div>
           </div>
