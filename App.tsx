@@ -13,12 +13,71 @@ const App: React.FC = () => {
   const [isActive, setIsActive] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  // Wake Lock Reference
+  const wakeLockRef = useRef<any>(null);
+
   // 초기화: 오디오 및 음원 로드
   useEffect(() => {
     // 사용자의 첫 터치 이벤트를 감지하여 오디오 컨텍스트를 활성화합니다.
     audioService.init();
     audioService.preloadAll();
   }, []);
+
+  // Screen Wake Lock Logic
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+          console.log('Wake Lock active');
+        }
+      } catch (err: any) {
+        console.error(`Wake Lock error: ${err.name}, ${err.message}`);
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      if (wakeLockRef.current) {
+        try {
+          await wakeLockRef.current.release();
+          wakeLockRef.current = null;
+          console.log('Wake Lock released');
+        } catch (err: any) {
+          console.error(`Wake Lock release error: ${err.name}, ${err.message}`);
+        }
+      }
+    };
+
+    if (isActive) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+
+    return () => {
+      releaseWakeLock();
+    };
+  }, [isActive]);
+
+  // Re-acquire Wake Lock when visibility changes (e.g. returning from another tab/app)
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && isActive) {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+          }
+        } catch (err) {
+          console.error('Wake Lock re-acquire failed', err);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isActive]);
 
   const phases = useMemo(() => getPhases(consultationDuration), [consultationDuration]);
   const lastAlarmRef = useRef<number | null>(null);
