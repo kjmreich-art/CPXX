@@ -12,10 +12,14 @@ const App: React.FC = () => {
   const [isActive, setIsActive] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  // 앱 시작 시 오디오 미리 로드
+  useEffect(() => {
+    audioService.preloadAll();
+  }, []);
+
   const phases = useMemo(() => getPhases(consultationDuration), [consultationDuration]);
   const lastAlarmRef = useRef<number | null>(null);
 
-  // Derived state
   const { currentPhase, elapsedInPhase, phaseIndex } = useMemo(() => {
     let acc = 0;
     for (let i = 0; i < phases.length; i++) {
@@ -35,50 +39,48 @@ const App: React.FC = () => {
     };
   }, [secondsElapsedTotal, phases]);
 
-  // Alarms Logic
+  // 알람 트리거 로직
   useEffect(() => {
     if (!isActive) return;
 
-    // Start of cycle (Preparation)
+    // 1. 상황 숙지 시작 (0초)
     if (secondsElapsedTotal === 0 && lastAlarmRef.current !== 0) {
       lastAlarmRef.current = 0;
-      audioService.playBeep(440, 0.5);
+      audioService.playReadingStart();
     }
 
-    // Start of Consultation (Entry)
+    // 2. 시험실 입실 (상황 숙지 종료 시점 = 1분)
     const entryTime = phases[0].duration;
     if (secondsElapsedTotal === entryTime && lastAlarmRef.current !== entryTime) {
       lastAlarmRef.current = entryTime;
-      audioService.playDoubleBeep();
+      audioService.playRoomEntry();
     }
 
-    // 2 min warning (Entry + Consult - 120s)
+    // 3. 진료 종료 2분 전 (입실시간 + 진료시간 - 120초)
     const warningTime = phases[0].duration + phases[1].duration - 120;
     if (secondsElapsedTotal === warningTime && lastAlarmRef.current !== warningTime) {
       lastAlarmRef.current = warningTime;
-      audioService.playBeep(660, 0.8, 'square');
+      audioService.playTwoMinWarning();
     }
 
-    // End of Consultation
+    // 4. 진료 종료 (입실시간 + 진료시간)
     const consultEndTime = phases[0].duration + phases[1].duration;
     if (secondsElapsedTotal === consultEndTime && lastAlarmRef.current !== consultEndTime) {
       lastAlarmRef.current = consultEndTime;
-      audioService.playTripleBeep();
+      audioService.playConsultEnd();
     }
 
-    // Cycle complete
+    // 사이클 전체 종료 및 반복 로직
     if (secondsElapsedTotal >= TOTAL_STATION_SECONDS) {
       if (isRepeat) {
         setSecondsElapsedTotal(0);
         lastAlarmRef.current = null;
       } else {
         setIsActive(false);
-        audioService.playBeep(880, 1.2);
       }
     }
   }, [secondsElapsedTotal, isActive, phases, isRepeat]);
 
-  // Timer Tick
   useEffect(() => {
     let interval: number | null = null;
     if (isActive) {
@@ -112,7 +114,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFD] flex flex-col items-center py-12 px-6 overflow-hidden">
-      {/* Header */}
       <header className="flex flex-col items-center mb-10 text-center">
         <div className="flex items-center gap-3 mb-2">
           <Clock className="text-blue-600 w-8 h-8" />
@@ -121,7 +122,6 @@ const App: React.FC = () => {
         <p className="text-slate-400 font-bold text-sm">졸업학년 의대생 실전 연습 도구</p>
       </header>
 
-      {/* Top Settings Toggle */}
       <div className="flex gap-3 mb-12">
         <button 
           onClick={() => setIsRepeat(!isRepeat)}
@@ -141,10 +141,8 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Main Timer Display */}
       <TimerDisplay phase={currentPhase} elapsedInPhase={elapsedInPhase} />
 
-      {/* Phase Trackers (Bottom Visualizer) */}
       <div className="w-full max-w-md mt-10">
         <div className="flex justify-between text-[9px] font-black text-slate-300 uppercase tracking-widest mb-2 px-1">
           <span>START</span>
@@ -170,7 +168,6 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Controls */}
       <div className="flex items-center gap-6 mt-12">
         <button
           onClick={handleToggle}
@@ -195,7 +192,6 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Phase Legend */}
       <div className="flex flex-wrap justify-center gap-4 mt-16">
         {phases.map((p, i) => (
           <div 
@@ -210,15 +206,13 @@ const App: React.FC = () => {
         ))}
       </div>
 
-      {/* Footer */}
       <footer className="mt-20 text-[11px] font-black text-slate-300 tracking-[0.2em] uppercase">
         Medical Practice Solution • CPX 15m Cycle
       </footer>
 
-      {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-6">
-          <div className="bg-white rounded-[40px] w-full max-w-sm p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-[40px] w-full max-sm p-8 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3 mb-8">
               <Settings2 className="text-blue-600" />
               <h2 className="text-xl font-black text-slate-800">진료 시간 설정</h2>
