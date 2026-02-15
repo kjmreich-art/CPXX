@@ -25,17 +25,12 @@ const App: React.FC = () => {
         console.log('Wake Lock active');
         
         lock.addEventListener('release', () => {
-          console.log('Wake Lock released by system');
           if (wakeLockRef.current === lock) {
             wakeLockRef.current = null;
           }
         });
       } catch (err: any) {
-        if (err.name === 'NotAllowedError') {
-          console.warn('Screen Wake Lock blocked by permission policy or environment.');
-        } else {
-          console.warn(`Wake Lock error: ${err.name}, ${err.message}`);
-        }
+        console.warn('Wake Lock issue handled');
       }
     }
   }, []);
@@ -46,9 +41,8 @@ const App: React.FC = () => {
       try {
         await wakeLockRef.current.release();
         wakeLockRef.current = null;
-        console.log('Wake Lock released manually');
       } catch (err: any) {
-        console.warn(`Wake Lock release error: ${err.name}, ${err.message}`);
+        console.warn('Wake Lock release issue');
       }
     }
   }, []);
@@ -188,7 +182,7 @@ const App: React.FC = () => {
       
       <PWAInstallPrompt />
 
-      {/* App Title Header - Reduced top margin */}
+      {/* App Title Header - Restored Design */}
       <div className="mt-2 mb-2 animate-in fade-in slide-in-from-top-4 duration-700">
         <h1 className="text-base font-black text-slate-800 tracking-tighter flex items-center gap-2">
           <span className="text-blue-600">2026 동국의대</span>
@@ -197,7 +191,7 @@ const App: React.FC = () => {
         </h1>
       </div>
 
-      {/* Main Action Buttons - Reduced margin bottom */}
+      {/* Settings Grid */}
       <div className="grid grid-cols-2 gap-3 w-full max-w-md mb-2 animate-in fade-in zoom-in-95 duration-700 delay-100">
         <button 
           onClick={() => {
@@ -226,12 +220,12 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Main Timer Display - Constrained flex-grow with max-height to reduce gaps */}
-      <div className="w-full flex-grow flex items-center justify-center max-h-[380px] animate-in fade-in slide-in-from-bottom-6 duration-700 delay-200">
+      {/* Main Timer Display */}
+      <div className="w-full flex-grow flex items-center justify-center max-h-[360px] animate-in fade-in slide-in-from-bottom-6 duration-700 delay-200">
         <TimerDisplay phase={currentPhase} elapsedInPhase={elapsedInPhase} />
       </div>
 
-      {/* Control Bar - Reduced top margin */}
+      {/* Control Bar */}
       <div className="flex items-center gap-4 mt-4 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
         <button
           onClick={handleReset}
@@ -260,7 +254,7 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Phase Badges - Reduced top margin */}
+      {/* Phase Badges */}
       <div className="flex flex-wrap justify-center gap-1.5 mt-4 mb-2 animate-in fade-in duration-700 delay-400">
         {phases.map((p, i) => (
           <div 
@@ -277,7 +271,7 @@ const App: React.FC = () => {
         ))}
       </div>
 
-      {/* Footer - Minimal space */}
+      {/* Footer */}
       <footer className="mt-auto pb-4 text-center opacity-30">
         <p className="text-[9px] font-black text-slate-400 tracking-[0.2em] uppercase">Created by JM</p>
       </footer>

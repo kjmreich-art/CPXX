@@ -7,6 +7,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="CPX TIMER">
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo.png">
     <link rel="manifest" href="manifest.json">
     <title>CPX Master Timer</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -30,7 +32,6 @@
             animation: spin-slow 8s linear infinite;
         }
         
-        /* Custom Tailwind Utilities for transitions */
         .animate-in {
             animation-duration: 0.5s;
             animation-fill-mode: both;
@@ -59,12 +60,16 @@
     "react": "https://esm.sh/react@^19.2.4",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.564.0"
+    "lucide-react": "https://esm.sh/lucide-react@^0.564.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4"
   }
 }
 </script>
 </head>
 <body>
     <div id="root"></div>
+    <!-- 앱 실행을 위한 진입점 추가 -->
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>

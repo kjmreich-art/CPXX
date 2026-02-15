@@ -5,13 +5,14 @@
   "description": "동국의대생을 위한 CPX 실전 연습용 타이머",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F0F4F8",
+  "background_color": "#F8FAFC",
   "theme_color": "#2563EB",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/2830/2830312.png",
+      "src": "logo.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
