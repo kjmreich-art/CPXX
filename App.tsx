@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Phase, getPhases, DEFAULT_CONSULTATION_SECONDS, TOTAL_STATION_SECONDS } from './types';
 import { audioService } from './services/audioService';
 import TimerDisplay from './components/TimerDisplay';
@@ -16,68 +16,73 @@ const App: React.FC = () => {
   // Wake Lock Reference
   const wakeLockRef = useRef<any>(null);
 
+  // Wake Lock Request Function
+  const requestWakeLock = useCallback(async () => {
+    if ('wakeLock' in navigator && !wakeLockRef.current && document.visibilityState === 'visible') {
+      try {
+        const lock = await (navigator as any).wakeLock.request('screen');
+        wakeLockRef.current = lock;
+        console.log('Wake Lock active');
+        
+        lock.addEventListener('release', () => {
+          console.log('Wake Lock released by system');
+          if (wakeLockRef.current === lock) {
+            wakeLockRef.current = null;
+          }
+        });
+      } catch (err: any) {
+        if (err.name === 'NotAllowedError') {
+          console.warn('Screen Wake Lock blocked by permission policy or environment.');
+        } else {
+          console.warn(`Wake Lock error: ${err.name}, ${err.message}`);
+        }
+      }
+    }
+  }, []);
+
+  // Wake Lock Release Function
+  const releaseWakeLock = useCallback(async () => {
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+        console.log('Wake Lock released manually');
+      } catch (err: any) {
+        console.warn(`Wake Lock release error: ${err.name}, ${err.message}`);
+      }
+    }
+  }, []);
+
   // 초기화: 오디오 및 음원 로드
   useEffect(() => {
-    // 사용자의 첫 터치 이벤트를 감지하여 오디오 컨텍스트를 활성화합니다.
     audioService.init();
     audioService.preloadAll();
   }, []);
 
   // Screen Wake Lock Logic
   useEffect(() => {
-    const requestWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-          console.log('Wake Lock active');
-        }
-      } catch (err: any) {
-        console.error(`Wake Lock error: ${err.name}, ${err.message}`);
-      }
-    };
-
-    const releaseWakeLock = async () => {
-      if (wakeLockRef.current) {
-        try {
-          await wakeLockRef.current.release();
-          wakeLockRef.current = null;
-          console.log('Wake Lock released');
-        } catch (err: any) {
-          console.error(`Wake Lock release error: ${err.name}, ${err.message}`);
-        }
-      }
-    };
-
     if (isActive) {
       requestWakeLock();
     } else {
       releaseWakeLock();
     }
-
     return () => {
       releaseWakeLock();
     };
-  }, [isActive]);
+  }, [isActive, requestWakeLock, releaseWakeLock]);
 
-  // Re-acquire Wake Lock when visibility changes (e.g. returning from another tab/app)
+  // Re-acquire Wake Lock when visibility changes
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible' && isActive) {
-        try {
-          if ('wakeLock' in navigator) {
-            wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-          }
-        } catch (err) {
-          console.error('Wake Lock re-acquire failed', err);
-        }
+        setTimeout(() => requestWakeLock(), 1000);
       }
     };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isActive]);
+  }, [isActive, requestWakeLock]);
 
   const phases = useMemo(() => getPhases(consultationDuration), [consultationDuration]);
   const lastAlarmRef = useRef<number | null>(null);
@@ -129,9 +134,10 @@ const App: React.FC = () => {
         lastAlarmRef.current = null;
       } else {
         setIsActive(false);
+        releaseWakeLock();
       }
     }
-  }, [secondsElapsedTotal, isActive, phases, isRepeat]);
+  }, [secondsElapsedTotal, isActive, phases, isRepeat, releaseWakeLock]);
 
   useEffect(() => {
     let interval: number | null = null;
@@ -144,9 +150,12 @@ const App: React.FC = () => {
   }, [isActive]);
 
   const handleToggle = () => {
-    // 버튼 클릭 시에도 명시적으로 언락 시도 (전역 리스너가 실패했을 경우 대비)
     audioService.unlock();
-
+    if (!isActive) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
     if (!isActive && (secondsElapsedTotal >= TOTAL_STATION_SECONDS || secondsElapsedTotal === 0)) {
       setSecondsElapsedTotal(0);
       lastAlarmRef.current = null;
@@ -156,12 +165,14 @@ const App: React.FC = () => {
 
   const handleReset = () => {
     setIsActive(false);
+    releaseWakeLock();
     setSecondsElapsedTotal(0);
     lastAlarmRef.current = null;
   };
 
   const handleNext = () => {
     audioService.unlock();
+    requestWakeLock();
     const nextPhaseStart = phases.slice(0, phaseIndex + 1).reduce((sum, p) => sum + p.duration, 0);
     if (nextPhaseStart < TOTAL_STATION_SECONDS) {
       setSecondsElapsedTotal(nextPhaseStart);
@@ -173,35 +184,34 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen max-h-screen bg-gradient-to-b from-[#F0F4F8] to-[#FFFFFF] flex flex-col items-center p-4 overflow-hidden touch-none relative">
+    <div className="h-screen max-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#FFFFFF] flex flex-col items-center p-4 overflow-hidden touch-none relative">
       
-      {/* PWA Install Inducer */}
       <PWAInstallPrompt />
 
-      {/* App Title Header */}
-      <div className="mt-4 mb-2 animate-in fade-in slide-in-from-top-4 duration-700">
-        <h1 className="text-lg font-black text-slate-800 tracking-tighter flex items-center gap-2">
+      {/* App Title Header - Reduced top margin */}
+      <div className="mt-2 mb-2 animate-in fade-in slide-in-from-top-4 duration-700">
+        <h1 className="text-base font-black text-slate-800 tracking-tighter flex items-center gap-2">
           <span className="text-blue-600">2026 동국의대</span>
           <span className="opacity-40">|</span>
           <span>CPX TIMER</span>
         </h1>
       </div>
 
-      {/* Main Action Buttons (Positioned lower) */}
-      <div className="grid grid-cols-2 gap-3 w-full max-w-md mb-4 animate-in fade-in zoom-in-95 duration-700 delay-100">
+      {/* Main Action Buttons - Reduced margin bottom */}
+      <div className="grid grid-cols-2 gap-3 w-full max-w-md mb-2 animate-in fade-in zoom-in-95 duration-700 delay-100">
         <button 
           onClick={() => {
             audioService.unlock();
             setIsRepeat(!isRepeat);
           }}
-          className={`flex flex-col items-center justify-center gap-1 p-4 rounded-[24px] transition-all duration-300 border-2 ${
+          className={`flex flex-col items-center justify-center gap-1 p-3 rounded-[20px] transition-all duration-300 border-2 ${
             isRepeat 
               ? 'bg-blue-600 border-blue-600 text-white shadow-lg' 
-              : 'bg-white border-slate-100 text-slate-500 hover:border-blue-200'
+              : 'bg-white border-slate-100 text-slate-500'
           }`}
         >
-          <Repeat className={`w-5 h-5 ${isRepeat ? 'animate-spin-slow' : ''}`} />
-          <span className="text-[11px] font-black uppercase tracking-tight">반복: {isRepeat ? 'ON' : 'OFF'}</span>
+          <Repeat className={`w-4 h-4 ${isRepeat ? 'animate-spin-slow' : ''}`} />
+          <span className="text-[10px] font-black uppercase tracking-tight">반복: {isRepeat ? 'ON' : 'OFF'}</span>
         </button>
 
         <button 
@@ -209,73 +219,73 @@ const App: React.FC = () => {
             audioService.unlock();
             setShowSettings(true);
           }}
-          className="flex flex-col items-center justify-center gap-1 p-4 rounded-[24px] bg-white border-2 border-slate-100 text-slate-600 hover:border-blue-200 transition-all duration-300 shadow-sm"
+          className="flex flex-col items-center justify-center gap-1 p-3 rounded-[20px] bg-white border-2 border-slate-100 text-slate-600 shadow-sm"
         >
-          <Settings2 className="w-5 h-5" />
-          <span className="text-[11px] font-black uppercase tracking-tight">시간 설정</span>
+          <Settings2 className="w-4 h-4" />
+          <span className="text-[10px] font-black uppercase tracking-tight">시간 설정</span>
         </button>
       </div>
 
-      {/* Main Timer Display */}
-      <div className="w-full flex-grow flex items-center justify-center animate-in fade-in slide-in-from-bottom-6 duration-700 delay-200">
+      {/* Main Timer Display - Constrained flex-grow with max-height to reduce gaps */}
+      <div className="w-full flex-grow flex items-center justify-center max-h-[380px] animate-in fade-in slide-in-from-bottom-6 duration-700 delay-200">
         <TimerDisplay phase={currentPhase} elapsedInPhase={elapsedInPhase} />
       </div>
 
-      {/* Control Bar */}
-      <div className="flex items-center gap-4 mt-6 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
+      {/* Control Bar - Reduced top margin */}
+      <div className="flex items-center gap-4 mt-4 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
         <button
           onClick={handleReset}
-          className="group flex items-center justify-center w-14 h-14 rounded-2xl bg-white border-2 border-slate-100 text-slate-300 hover:text-red-500 transition-all shadow-sm active:scale-90"
+          className="group flex items-center justify-center w-12 h-12 rounded-2xl bg-white border-2 border-slate-100 text-slate-300 hover:text-red-500 transition-all shadow-sm active:scale-90"
         >
-          <RotateCcw className="w-6 h-6 group-hover:rotate-[-45deg] transition-transform" />
+          <RotateCcw className="w-5 h-5 group-hover:rotate-[-45deg] transition-transform" />
         </button>
 
         <button
           onClick={handleToggle}
-          className={`group flex items-center justify-center gap-3 px-10 py-5 rounded-[32px] font-black text-xl transition-all duration-300 active:scale-95 ${
+          className={`group flex items-center justify-center gap-3 px-8 py-4 rounded-[28px] font-black text-lg transition-all duration-300 active:scale-95 ${
             isActive 
-              ? 'bg-slate-800 text-white shadow-xl shadow-slate-200' 
-              : 'bg-blue-600 text-white shadow-xl shadow-blue-200'
+              ? 'bg-slate-800 text-white shadow-xl' 
+              : 'bg-blue-600 text-white shadow-xl shadow-blue-100'
           }`}
         >
-          {isActive ? <Pause className="fill-current w-6 h-6" /> : <Play className="fill-current w-6 h-6" />}
+          {isActive ? <Pause className="fill-current w-5 h-5" /> : <Play className="fill-current w-5 h-5" />}
           <span>{isActive ? '중지' : (secondsElapsedTotal > 0 ? '재시작' : '시작')}</span>
         </button>
 
         <button
           onClick={handleNext}
-          className="group flex items-center justify-center w-14 h-14 rounded-2xl bg-white border-2 border-slate-100 text-slate-300 hover:text-blue-600 transition-all shadow-sm active:scale-90"
+          className="group flex items-center justify-center w-12 h-12 rounded-2xl bg-white border-2 border-slate-100 text-slate-300 hover:text-blue-600 transition-all shadow-sm active:scale-90"
         >
-          <SkipForward className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+          <SkipForward className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
 
-      {/* Phase Badges */}
-      <div className="flex flex-wrap justify-center gap-2 mt-6 mb-2 animate-in fade-in duration-700 delay-400">
+      {/* Phase Badges - Reduced top margin */}
+      <div className="flex flex-wrap justify-center gap-1.5 mt-4 mb-2 animate-in fade-in duration-700 delay-400">
         {phases.map((p, i) => (
           <div 
             key={p.id}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-black transition-all duration-500 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black transition-all duration-500 ${
               phaseIndex === i 
                 ? `${p.color} ring-2 ring-offset-1 ring-blue-50 scale-105 shadow-sm` 
                 : 'bg-white text-slate-300 border border-slate-100 opacity-60'
             }`}
           >
-            <div className={`w-2 h-2 rounded-full ${phaseIndex === i ? p.activeColor : 'bg-slate-200'}`} />
+            <div className={`w-1.5 h-1.5 rounded-full ${phaseIndex === i ? p.activeColor : 'bg-slate-200'}`} />
             {p.label} <span className="opacity-50 font-bold">{p.subLabel}</span>
           </div>
         ))}
       </div>
 
-      {/* Footer */}
-      <footer className="mt-2 py-4 text-center opacity-40">
-        <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase">Created by JM</p>
+      {/* Footer - Minimal space */}
+      <footer className="mt-auto pb-4 text-center opacity-30">
+        <p className="text-[9px] font-black text-slate-400 tracking-[0.2em] uppercase">Created by JM</p>
       </footer>
 
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white rounded-[40px] w-full max-sm p-8 shadow-2xl border border-white/20">
+          <div className="bg-white rounded-[40px] w-full max-w-sm p-8 shadow-2xl border border-white/20">
             <div className="flex items-center gap-4 mb-6">
               <div className="p-2 bg-blue-50 rounded-xl text-blue-600">
                 <Settings2 className="w-5 h-5" />
